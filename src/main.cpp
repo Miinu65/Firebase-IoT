@@ -1,6 +1,15 @@
 #include <Arduino.h>
+#include <DHT.h>
 #include <WiFi.h>
 #include <Firebase_ESP_Client.h>
+
+
+
+#define DHTPIN 4
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+
 
 // Firebase helpers
 #include <addons/TokenHelper.h>
@@ -11,19 +20,11 @@ String getLocalTimeISO();
 String getLocalTimeUNIX();
 
 // NTP
-#define NTP_SERVER "YOUR_NTP_SERVER"
+#define NTP_SERVER "pool.ntp.org"
 #define NTP_GMT_OFFSET_SEC 0
-#define NTP_DAYLIGHT_OFFSET_SEC 0
+#define NTP_DAYLIGHT_OFFSET_SEC 7200
 
-// WiFi credentials
-#define WIFI_SSID "YOUR_SSID"
-#define WIFI_PASSWORD "YOUR_PASSWORD"
 
-// Firebase API key
-#define API_KEY "YOUR_API_KEY"
-
-// Firebase RTDB URL
-#define DATABASE_URL "YOUR_RTDB_URL"
 
 // Firebase objects
 FirebaseData fbdo;
@@ -36,6 +37,10 @@ bool signupOK = false;
 
 void setup()
 {
+
+  Serial.begin(115200);
+  dht.begin();
+
   // Initialize Serial
   Serial.begin(115200);
 
@@ -80,11 +85,20 @@ void setup()
 
 void loop ()
 {
+
+  Serial.print("Temperature: ");
+  Serial.println(dht.readTemperature());
+  Serial.print("Humidity: ");
+  Serial.println(dht.readHumidity());
+  delay(1000); 
+
   static int intValue = 0;
   float floatValue = 0.0;
   static bool boolValue = true;
+  String eltiempo = getLocalTimeUNIX();
+  String confort;
 
-  if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 30000 || sendDataPrevMillis == 0))
+  if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 10000 || sendDataPrevMillis == 0))
   {
     // Firebase is ready, we are signup and 10 seconds has passed
     // Save current time
@@ -108,9 +122,9 @@ void loop ()
     }
 
     // Write sample float
-    floatValue = 0.01 + random (0,100);
+    float humedad = dht.readHumidity();
     Serial.print("FLOAT WRITE ");
-    if (Firebase.RTDB.setFloat(&fbdo, "test/float", floatValue))
+    if (Firebase.RTDB.setFloat(&fbdo, "sensor/" + eltiempo + "/humedad", humedad))
     {
       Serial.println("OK");
       Serial.println("  PATH: " + fbdo.dataPath());
@@ -123,7 +137,21 @@ void loop ()
       Serial.println("FAILED");
       Serial.println("  REASON: " + fbdo.errorReason());
     }
-
+    float temperatura = dht.readTemperature();
+    Serial.print("FLOAT WRITE ");
+    if (Firebase.RTDB.setFloat(&fbdo, "sensor/" + eltiempo + "/temperatura", temperatura))
+    {
+      Serial.println("OK");
+      Serial.println("  PATH: " + fbdo.dataPath());
+      Serial.println("  TYPE: " + fbdo.dataType());
+      Serial.print("  VALUE: ");
+      Serial.println(fbdo.floatData());
+    }
+    else
+    {
+      Serial.println("FAILED");
+      Serial.println("  REASON: " + fbdo.errorReason());
+    }
     // Write sample boolean
     boolValue = !boolValue;
     Serial.print("BOOLEAN WRITE ");
@@ -143,13 +171,39 @@ void loop ()
 
     // Write sample string
     Serial.print("STRING WRITE ");
-    if (Firebase.RTDB.setString(&fbdo, "test/string", "KAIXO!"))
+    String tiempo = getLocalTimeISO();
+    if (Firebase.RTDB.setString(&fbdo, "sensor/" + eltiempo + "/timestamp" , tiempo))
     {
       Serial.println("OK");
       Serial.println("  PATH: " + fbdo.dataPath());
       Serial.println("  TYPE: " + fbdo.dataType());
       Serial.print("  VALUE: ");
-      Serial.println(fbdo.stringData());
+      
+    }
+    else
+    {
+      Serial.println("FAILED");
+      Serial.println("  REASON: " + fbdo.errorReason());
+    }
+
+   // Write confort
+    Serial.print("STRING WRITE ");
+    
+    if (temperatura > 17 && temperatura <24 && humedad > 20 && humedad < 80)
+    {
+      confort= "Confortable";
+    }
+    else
+    {
+      confort= "No Confortable";
+    }
+if (Firebase.RTDB.setString(&fbdo, "sensor/" + eltiempo + "/confort" , confort))
+    {
+      Serial.println("OK");
+      Serial.println("  PATH: " + fbdo.dataPath());
+      Serial.println("  TYPE: " + fbdo.dataType());
+      Serial.print("  VALUE: ");
+      
     }
     else
     {
